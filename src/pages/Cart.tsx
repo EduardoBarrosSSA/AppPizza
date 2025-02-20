@@ -1,12 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
 import { Trash2, Plus, Minus } from 'lucide-react';
 import { CheckoutForm } from '../components/CheckoutForm';
 import { CustomerInfo } from '../types';
+import { supabase } from '../lib/supabase';
 
 export function Cart() {
   const { state, dispatch } = useCart();
   const [showCheckout, setShowCheckout] = useState(false);
+  const [businessWhatsapp, setBusinessWhatsapp] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadBusinessDetails() {
+      if (state.businessId) {
+        const { data } = await supabase
+          .from('businesses')
+          .select('whatsapp')
+          .eq('id', state.businessId)
+          .single();
+        
+        if (data) {
+          setBusinessWhatsapp(data.whatsapp);
+        }
+      }
+    }
+
+    loadBusinessDetails();
+  }, [state.businessId]);
 
   const handleUpdateQuantity = (index: number, newQuantity: number) => {
     if (newQuantity < 1) return;
@@ -17,48 +37,78 @@ export function Cart() {
     dispatch({ type: 'REMOVE_FROM_CART', payload: index });
   };
 
-  const handleCheckout = (customerInfo: CustomerInfo) => {
-    // Formatar mensagem para WhatsApp
-    const items = state.items.map(item => {
-      const flavors = item.flavors.map(f => f.name).join(', ');
-      return `${item.quantity}x Pizza ${item.size.name} - Sabores: ${flavors}`;
-    }).join('\n');
-
-    const paymentMethods = {
-      cash: 'Dinheiro',
-      card: 'Cartão',
-      pix: 'PIX'
-    };
-
-    let message = `🍕 *Novo Pedido*\n\n`;
-    message += `*Cliente:* ${customerInfo.name}\n`;
-    message += `*Telefone:* ${customerInfo.phone}\n`;
-    message += `*Endereço:* ${customerInfo.address}\n`;
-    if (customerInfo.complement) {
-      message += `*Complemento:* ${customerInfo.complement}\n`;
-    }
-    message += `\n*Itens do Pedido:*\n${items}\n\n`;
-    message += `*Subtotal:* R$ ${state.total.toFixed(2)}\n`;
-    message += `*Taxa de Entrega:* R$ 5,00\n`;
-    message += `*Total:* R$ ${(state.total + 5).toFixed(2)}\n\n`;
-    message += `*Forma de Pagamento:* ${paymentMethods[customerInfo.paymentMethod]}`;
-    
-    if (customerInfo.paymentMethod === 'cash' && customerInfo.changeFor) {
-      message += `\n*Troco para:* R$ ${customerInfo.changeFor.toFixed(2)}`;
+  const handleCheckout = async (customerInfo: CustomerInfo) => {
+    if (!businessWhatsapp || !state.businessId) {
+      alert('Erro ao processar pedido. Por favor, tente novamente.');
+      return;
     }
 
-    // Codificar a mensagem para URL
-    const encodedMessage = encodeURIComponent(message);
-    
-    // Número do WhatsApp da pizzaria (substitua pelo número real)
-    const phoneNumber = '5511999999999';
-    
-    // Abrir WhatsApp
-    window.open(`https://wa.me/${phoneNumber}?text=${encodedMessage}`, '_blank');
-    
-    // Limpar o carrinho
-    dispatch({ type: 'CLEAR_CART' });
-    setShowCheckout(false);
+    try {
+      // Salvar o pedido no banco de dados
+      const { error: orderError } = await supabase
+        .from('orders')
+        .insert([{
+          business_id: state.businessId,
+          customer_name: customerInfo.name,
+          customer_phone: customerInfo.phone,
+          customer_address: customerInfo.address,
+          customer_complement: customerInfo.complement,
+          payment_method: customerInfo.paymentMethod,
+          change_for: customerInfo.changeFor,
+          items: state.items,
+          subtotal: state.total,
+          delivery_fee: 5,
+          total: state.total + 5,
+          status: 'pending'
+        }]);
+
+      if (orderError) throw orderError;
+
+      // Format WhatsApp message
+      const items = state.items.map(item => {
+        if (item.size) {
+          const products = item.products.map(p => p.name).join(', ');
+          return `${item.quantity}x ${item.size.name} - ${products}`;
+        }
+        return `${item.quantity}x ${item.products[0].name}`;
+      }).join('\n');
+
+      const paymentMethods = {
+        cash: 'Dinheiro',
+        card: 'Cartão',
+        pix: 'PIX'
+      };
+
+      let message = `🍕 *Novo Pedido*\n\n`;
+      message += `*Cliente:* ${customerInfo.name}\n`;
+      message += `*Telefone:* ${customerInfo.phone}\n`;
+      message += `*Endereço:* ${customerInfo.address}\n`;
+      if (customerInfo.complement) {
+        message += `*Complemento:* ${customerInfo.complement}\n`;
+      }
+      message += `\n*Itens do Pedido:*\n${items}\n\n`;
+      message += `*Subtotal:* R$ ${state.total.toFixed(2)}\n`;
+      message += `*Taxa de Entrega:* R$ 5,00\n`;
+      message += `*Total:* R$ ${(state.total + 5).toFixed(2)}\n\n`;
+      message += `*Forma de Pagamento:* ${paymentMethods[customerInfo.paymentMethod]}`;
+      
+      if (customerInfo.paymentMethod === 'cash' && customerInfo.changeFor) {
+        message += `\n*Troco para:* R$ ${customerInfo.changeFor.toFixed(2)}`;
+      }
+
+      // Encode message for URL
+      const encodedMessage = encodeURIComponent(message);
+      
+      // Open WhatsApp with the business number
+      window.open(`https://wa.me/${businessWhatsapp}?text=${encodedMessage}`, '_blank');
+      
+      // Clear cart
+      dispatch({ type: 'CLEAR_CART' });
+      setShowCheckout(false);
+    } catch (error) {
+      console.error('Erro ao salvar pedido:', error);
+      alert('Erro ao processar pedido. Por favor, tente novamente.');
+    }
   };
 
   if (state.items.length === 0) {
@@ -83,12 +133,8 @@ export function Cart() {
           <div key={index} className="flex items-center py-4 border-b">
             <div className="flex-1">
               <h3 className="text-lg font-semibold">
-                Pizza {item.size.name}
-                {item.flavors.length > 1 ? ` - ${item.flavors.length} sabores` : ''}
+                {item.size ? `${item.size.name} - ${item.products.map(p => p.name).join(', ')}` : item.products[0].name}
               </h3>
-              <p className="text-gray-600">
-                Sabores: {item.flavors.map(f => f.name).join(', ')}
-              </p>
               <div className="flex items-center mt-2">
                 <button
                   onClick={() => handleUpdateQuantity(index, item.quantity - 1)}
@@ -104,7 +150,7 @@ export function Cart() {
                   <Plus size={20} />
                 </button>
                 <span className="ml-auto text-lg font-semibold">
-                  R$ {(item.size.price * item.quantity).toFixed(2)}
+                  R$ {((item.size?.price || item.products[0].price) * item.quantity).toFixed(2)}
                 </span>
                 <button
                   onClick={() => handleRemoveItem(index)}

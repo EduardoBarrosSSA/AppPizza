@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useReducer } from 'react';
-import { Pizza, CartState, PizzaSize, CartPizza } from '../types';
+import { Product, CartState, Size, CartItem } from '../types';
 
 type CartAction =
-  | { type: 'ADD_TO_CART'; payload: { size: PizzaSize; flavors: Pizza[] } }
+  | { type: 'SET_BUSINESS'; payload: string }
+  | { type: 'ADD_TO_CART'; payload: { size?: Size; products: Product[] } }
   | { type: 'REMOVE_FROM_CART'; payload: number }
   | { type: 'UPDATE_QUANTITY'; payload: { index: number; quantity: number } }
   | { type: 'CLEAR_CART' };
@@ -13,34 +14,55 @@ const CartContext = createContext<{
 } | null>(null);
 
 const initialState: CartState = {
+  businessId: null,
   items: [],
   total: 0,
 };
 
-function calculatePizzaPrice(pizza: CartPizza): number {
-  return pizza.size.price * pizza.quantity;
+function calculateItemPrice(item: CartItem): number {
+  if (item.size) {
+    return item.size.price * item.quantity;
+  }
+  return item.products[0].price * item.quantity;
 }
 
 function cartReducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
+    case 'SET_BUSINESS': {
+      if (state.businessId && state.businessId !== action.payload) {
+        // Clear cart if switching businesses
+        return {
+          businessId: action.payload,
+          items: [],
+          total: 0,
+        };
+      }
+      return {
+        ...state,
+        businessId: action.payload,
+      };
+    }
+
     case 'ADD_TO_CART': {
-      const newItem: CartPizza = {
+      const newItem: CartItem = {
         size: action.payload.size,
-        flavors: action.payload.flavors,
+        products: action.payload.products,
         quantity: 1
       };
 
       return {
+        ...state,
         items: [...state.items, newItem],
-        total: state.total + calculatePizzaPrice(newItem),
+        total: state.total + calculateItemPrice(newItem),
       };
     }
 
     case 'REMOVE_FROM_CART': {
       const itemToRemove = state.items[action.payload];
       return {
+        ...state,
         items: state.items.filter((_, index) => index !== action.payload),
-        total: state.total - calculatePizzaPrice(itemToRemove),
+        total: state.total - calculateItemPrice(itemToRemove),
       };
     }
 
@@ -53,18 +75,23 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       });
 
       const newTotal = updatedItems.reduce(
-        (total, item) => total + calculatePizzaPrice(item),
+        (total, item) => total + calculateItemPrice(item),
         0
       );
 
       return {
+        ...state,
         items: updatedItems,
         total: newTotal,
       };
     }
 
     case 'CLEAR_CART':
-      return initialState;
+      return {
+        ...state,
+        items: [],
+        total: 0,
+      };
 
     default:
       return state;

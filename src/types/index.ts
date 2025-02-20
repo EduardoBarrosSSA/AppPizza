@@ -1,49 +1,18 @@
-export interface Pizza {
+// Add PriceUnit type to existing types file
+export type PriceUnit = 'unit' | 'kg' | 'g' | 'l' | 'ml';
+
+// Update Product interface to include priceUnit
+export interface Product {
   id: string;
+  businessId: string;
   name: string;
-  description: string;
+  description?: string;
   price: number;
-  image: string;
-  ingredients: string[];
+  priceUnit: PriceUnit;
+  imageUrl?: string;
   inStock: boolean;
+  category?: string;
+  allowsMultipleFlavors?: boolean;
 }
 
-export interface PizzaSize {
-  id: string;
-  name: string;
-  maxFlavors: number;
-  price: number;
-  description: string;
-}
-
-export interface CartPizza {
-  size: PizzaSize;
-  flavors: Pizza[];
-  quantity: number;
-}
-
-export interface CartState {
-  items: CartPizza[];
-  total: number;
-}
-
-export type PaymentMethod = 'cash' | 'card' | 'pix';
-
-export interface CustomerInfo {
-  name: string;
-  phone: string;
-  address: string;
-  complement?: string;
-  paymentMethod: PaymentMethod;
-  changeFor?: number; // Para pagamentos em dinheiro
-}
-
-export interface Order {
-  id: string;
-  customerInfo: CustomerInfo;
-  items: CartPizza[];
-  total: number;
-  deliveryFee: number;
-  status: 'pending' | 'preparing' | 'delivering' | 'delivered';
-  createdAt: Date;
-}
+// Rest of the existing types...
