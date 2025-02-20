@@ -12,11 +12,12 @@ import { Cart } from './pages/Cart';
 import { Login } from './pages/Login';
 import { DeliveryDriver } from './pages/DeliveryDriver';
 import { DriverLogin } from './pages/DriverLogin';
+import { DriverAccess } from './pages/DriverAccess';
 import { CartProvider } from './context/CartContext';
 
 function AppContent() {
   const location = useLocation();
-  const showHeader = !['/', '/register', '/entregador', '/entregador/login'].includes(location.pathname);
+  const showHeader = !['/', '/register', '/driver', '/driver/login'].includes(location.pathname);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -35,6 +36,11 @@ function AppContent() {
         <Route path="/system-admin" element={<SystemAdmin />} />
         
         {/* Driver routes */}
+        <Route path="/driver" element={<DriverAccess />} />
+        <Route path="/driver/login" element={<DriverLogin />} />
+        <Route path="/driver/dashboard" element={<DeliveryDriver />} />
+        
+        {/* Outras rotas */}
         <Route path="/entregador" element={<DriverLogin />} />
         <Route path="/entregador/login" element={<DriverLogin />} />
         <Route path="/delivery" element={<DeliveryDriver />} />
